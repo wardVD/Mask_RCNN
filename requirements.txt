@@ -1,8 +1,0 @@
-numpy
-scipy
-Pillow
-cython
-matplotlib
-scikit-image
-h5py
-IPython[all]

@@ -200,13 +200,20 @@ def train(model):
                 layers='heads')
 
 
-def color_splash(image, mask):
+def color_splash(image, mask, yellow=False):
     """Apply color splash effect.
     image: RGB image [height, width, 3]
     mask: instance segmentation mask [height, width, instance count]
 
     Returns result image.
     """
+    if yellow:
+        zeros = np.zeros([1440, 1920, 3])
+        yellow_mask = zeros
+        yellow_mask[:,:, 0] = 255
+        yellow_mask[:,:, 1] = 172
+        yellow_mask[:,:, 2] = 38
+    
     # Make a grayscale copy of the image. The grayscale copy still
     # has 3 RGB channels, though.
     gray = skimage.color.gray2rgb(skimage.color.rgb2gray(image)) * 255
@@ -214,13 +221,16 @@ def color_splash(image, mask):
     if mask.shape[-1] > 0:
         # We're treating all instances as one, so collapse the mask into one layer
         mask = (np.sum(mask, -1, keepdims=True) >= 1)
-        splash = np.where(mask, image, gray).astype(np.uint8)
+        if yellow:
+            splash = np.where(mask, yellow_mask, gray).astype(np.uint8)
+        else:
+            splash = np.where(mask, image, gray).astype(np.uint8)
     else:
         splash = gray.astype(np.uint8)
     return splash
 
 
-def detect_and_color_splash(model, image_path=None, video_path=None):
+def detect_and_color_splash(model, yellow = False, image_path=None, video_path=None):
     assert image_path or video_path
 
     # Image or video?
@@ -232,7 +242,7 @@ def detect_and_color_splash(model, image_path=None, video_path=None):
         # Detect objects
         r = model.detect([image], verbose=1)[0]
         # Color splash
-        splash = color_splash(image, r['masks'])
+        splash = color_splash(image, r['masks'], yellow=yellow)
         # Save output
         file_name = "splash_{:%Y%m%dT%H%M%S}.png".format(datetime.datetime.now())
         skimage.io.imsave(file_name, splash)
@@ -252,23 +262,29 @@ def detect_and_color_splash(model, image_path=None, video_path=None):
 
         count = 0
         success = True
-        while success:
+        
+        while(vcapture.isOpened()):
             print("frame: ", count)
-            # Read next image
+
             success, image = vcapture.read()
-            if success:
-                # OpenCV returns images as BGR, convert to RGB
-                image = image[..., ::-1]
-                # Detect objects
-                r = model.detect([image], verbose=0)[0]
-                # Color splash
-                splash = color_splash(image, r['masks'])
-                # RGB -> BGR to save image to video
-                splash = splash[..., ::-1]
-                # Add image to video writer
-                vwriter.write(splash)
-                count += 1
-        vwriter.release()
+            # OpenCV returns images as BGR, convert to RGB
+            image = image[..., ::-1]
+            # Detect objects
+            r = model.detect([image], verbose=0)[0]
+            # Color splash
+            splash = color_splash(image, r['masks'], yellow=yellow)
+            # RGB -> BGR to save image to video
+            splash = splash[..., ::-1]
+            # Add image to video writer
+            vwriter.write(splash)
+            count += 1
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        
+        vcapture.release()
+        cv2.destroyAllWindows()
+    
     print("Saved to ", file_name)
 
 
@@ -364,7 +380,8 @@ if __name__ == '__main__':
     if args.command == "train":
         train(model)
     elif args.command == "splash":
-        detect_and_color_splash(model, image_path=args.image,
+        detect_and_color_splash(model, yellow = True,
+                                image_path=args.image,
                                 video_path=args.video)
     else:
         print("'{}' is not recognized. "

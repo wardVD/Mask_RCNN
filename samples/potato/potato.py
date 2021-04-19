@@ -200,28 +200,41 @@ def train(model):
                 layers='heads')
 
 
-def color_splash(image, mask, yellow=False):
+def color_splash(image, mask, yellow=False, highlight=True):
     """Apply color splash effect.
     image: RGB image [height, width, 3]
     mask: instance segmentation mask [height, width, instance count]
 
     Returns result image.
     """
-    if yellow:
+    if highlight:
+        hsv = skimage.color.rgb2hsv(image)
+        dark = hsv.copy()
+        light = hsv.copy()
+        dark[:,:,2] *= 0.5
+        light[:,:,2] *= 1.1
+        
+        dark = skimage.color.hsv2rgb(dark)*255
+        light = skimage.color.hsv2rgb(light)*255
+        
+    elif yellow:
         zeros = np.zeros([1440, 1920, 3])
         yellow_mask = zeros
         yellow_mask[:,:, 0] = 255
         yellow_mask[:,:, 1] = 172
         yellow_mask[:,:, 2] = 38
     
-    # Make a grayscale copy of the image. The grayscale copy still
-    # has 3 RGB channels, though.
-    gray = skimage.color.gray2rgb(skimage.color.rgb2gray(image)) * 255
+    else:
+        # Make a grayscale copy of the image. The grayscale copy still
+        # has 3 RGB channels, though.
+        gray = skimage.color.gray2rgb(skimage.color.rgb2gray(image)) * 255
     # Copy color pixels from the original color image where mask is set
     if mask.shape[-1] > 0:
         # We're treating all instances as one, so collapse the mask into one layer
         mask = (np.sum(mask, -1, keepdims=True) >= 1)
-        if yellow:
+        if highlight:
+            splash = np.where(mask, light, dark).astype(np.uint8)
+        elif yellow:
             splash = np.where(mask, yellow_mask, gray).astype(np.uint8)
         else:
             splash = np.where(mask, image, gray).astype(np.uint8)
@@ -230,7 +243,7 @@ def color_splash(image, mask, yellow=False):
     return splash
 
 
-def detect_and_color_splash(model, yellow = False, image_path=None, video_path=None):
+def detect_and_color_splash(model, yellow = False, highlight=True, image_path=None, video_path=None):
     assert image_path or video_path
 
     # Image or video?
@@ -242,7 +255,7 @@ def detect_and_color_splash(model, yellow = False, image_path=None, video_path=N
         # Detect objects
         r = model.detect([image], verbose=1)[0]
         # Color splash
-        splash = color_splash(image, r['masks'], yellow=yellow)
+        splash = color_splash(image, r['masks'], yellow=yellow, highlight=highlight)
         # Save output
         file_name = "splash_{:%Y%m%dT%H%M%S}.png".format(datetime.datetime.now())
         skimage.io.imsave(file_name, splash)
@@ -272,7 +285,7 @@ def detect_and_color_splash(model, yellow = False, image_path=None, video_path=N
             # Detect objects
             r = model.detect([image], verbose=0)[0]
             # Color splash
-            splash = color_splash(image, r['masks'], yellow=yellow)
+            splash = color_splash(image, r['masks'], yellow=yellow, highlight=highlight)
             # RGB -> BGR to save image to video
             splash = splash[..., ::-1]
             # Add image to video writer
@@ -380,7 +393,8 @@ if __name__ == '__main__':
     if args.command == "train":
         train(model)
     elif args.command == "splash":
-        detect_and_color_splash(model, yellow = True,
+        detect_and_color_splash(model, yellow = False,
+                                highlight = True,
                                 image_path=args.image,
                                 video_path=args.video)
     else:

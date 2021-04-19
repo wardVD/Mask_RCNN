@@ -223,6 +223,7 @@ def color_splash(image, mask, yellow=False, highlight=True):
         yellow_mask[:,:, 0] = 255
         yellow_mask[:,:, 1] = 172
         yellow_mask[:,:, 2] = 38
+        gray = skimage.color.gray2rgb(skimage.color.rgb2gray(image)) * 255
     
     else:
         # Make a grayscale copy of the image. The grayscale copy still
@@ -239,7 +240,10 @@ def color_splash(image, mask, yellow=False, highlight=True):
         else:
             splash = np.where(mask, image, gray).astype(np.uint8)
     else:
-        splash = gray.astype(np.uint8)
+        if highlight:
+            splash = dark.astype(np.uint8)
+        else:
+            splash = gray.astype(np.uint8)
     return splash
 
 
